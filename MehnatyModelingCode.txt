@@ -1,0 +1,349 @@
+#Importing the required libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import sklearn
+import statsmodels.api as sm
+import seaborn as sns
+import pygeohash as gh
+%matplotlib inline
+
+from yellowbrick.target import FeatureCorrelation
+from yellowbrick.classifier import ClassBalance, ClassificationReport, ConfusionMatrix, DiscriminationThreshold
+from yellowbrick.features import JointPlotVisualizer, PCADecomposition, RadViz, Rank1D, Rank2D
+from sklearn.svm import LinearSVC, NuSVC, SVC
+from sklearn.linear_model import LogisticRegression, SGDClassifier, LogisticRegressionCV
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, GradientBoostingClassifier
+from sklearn.ensemble import VotingClassifier
+from sklearn.experimental import enable_hist_gradient_boosting
+from sklearn.ensemble import BaggingClassifier, AdaBoostClassifier, HistGradientBoostingClassifier
+from sklearn.naive_bayes import GaussianNB, MultinomialNB
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.compose import ColumnTransformer
+from sklearn.metrics import f1_score, roc_auc_score, balanced_accuracy_score
+from sklearn.dummy import DummyClassifier
+from xgboost import XGBClassifier, XGBRFClassifier
+import warnings
+from sklearn.model_selection import train_test_split
+from imblearn.over_sampling import SMOTE
+
+#Read the database file containing the data into a dataframe df
+df=pd.read_excel('Mehanty-Data.xlsx', sheet_name='Feuil1')
+
+#Geohash is a method to encode lattitudes and longitudes into a single alphanumeric geocode.
+
+#We encode the lattitiudes and longitudes into a column named "geohash" in the dataframe df
+df['geohash']=df.apply(lambda x: gh.encode(x.Location1, x.Location2, precision=3), axis=1)
+
+#In order to use the geohash as variables in our model, we convert it into dummy variables: 
+
+#In this way, the alphanumeric geohash values are converted into numeric form for use in modelling.
+
+#These dummy variables are stored in a dataframe "X".
+X=pd.get_dummies(df['geohash'], drop_first=False)
+
+#We add the column "Age" from df to dataframe "X"
+X['age']=df['Age']
+
+#Feature_names is a list of column names of dataframe X. It will be used in functions afterwards.
+feature_names = X.columns.tolist()
+
+#As we have very small number of respondents giving responses as 0 or 1 compared to respondents giving response.
+
+#as 2, we create artificial samples so that we have equal number of respondents from every class
+
+#This is done by a method called Synthetic Minority Oversampling Technique (SMOTE).
+
+#This prevents the prediction models from being biased towards the majority class (in this case, 2)
+
+#The function takes 2 inputs X and y. X is a data-frame of independent variables and y is the dependent variable.
+
+def smote(X,y):
+    os = SMOTE(random_state=0)
+    X_tr, X_te, y_tr, y_te = train_test_split(X,y,test_size=0.3, random_state=98, stratify=y)
+    columns = X_tr.columns
+    os_data_X,os_data_y=os.fit_sample(X_tr, y_tr)
+    X_train = pd.DataFrame(data=os_data_X,columns=columns)
+    y_train= pd.DataFrame(data=os_data_y,columns=['y'])
+    X_test=pd.DataFrame(data=X_te, columns=X_te.columns)
+    y_test= pd.DataFrame(data=y_te,columns=['y'])
+    return X_train, X_test, y_train, y_test
+
+#This is a function to assign a model. It takes 3 inputs, train_features=Dataframe of independent variables
+#...train_target=dependent variable and model=model to be used
+#The output of the function is a trained model fitted in train_features and train_target
+def model_assignment(train_features, train_target, model):
+    """
+    This function takes the design matrix and target vector of the validation set,
+    along with a classification estimator and
+    scores the predicted classes and true values via a balanced accuracy score.
+    This score is printed to the end user.
+    """
+    numeric_transformer = Pipeline(steps=[
+        ('scale_x_num', StandardScaler())
+    ])
+
+    pre_processor = ColumnTransformer(transformers=[
+        ('num', numeric_transformer, feature_names)
+    ])
+
+    clf = Pipeline(steps=[
+        ('preprocessor', pre_processor),
+        ('classifier', model)
+    ])
+
+    model_name = clf.named_steps['classifier'].__class__.__name__
+
+    return clf.fit(train_features, train_target)
+    
+#We create 3 models for each variable
+#The 3 models selected are BaggingClassifier, AdaBoostClassifier and XGBClassifier based on F1 scores on train
+#...and test set. The results of F1 scores are in the excel provided
+models=[BaggingClassifier(), AdaBoostClassifier(), XGBClassifier()]
+
+model_cat_Bag=model_assignment(X,df['Category'],BaggingClassifier())
+model_cat_Ada=model_assignment(X,df['Category'],AdaBoostClassifier())
+model_cat_XGB=model_assignment(X,df['Category'],XGBClassifier())
+
+model_q1_Bag=model_assignment(X,df['q1Ans'],BaggingClassifier())
+model_q1_Ada=model_assignment(X,df['q1Ans'],AdaBoostClassifier())
+model_q1_XGB=model_assignment(X,df['q1Ans'],XGBClassifier())
+
+model_q2_Bag=model_assignment(X,df['q2Ans'],BaggingClassifier())
+model_q2_Ada=model_assignment(X,df['q2Ans'],AdaBoostClassifier())
+model_q2_XGB=model_assignment(X,df['q2Ans'],XGBClassifier())
+
+model_q3_Bag=model_assignment(X,df['q3Ans'],BaggingClassifier())
+model_q3_Ada=model_assignment(X,df['q3Ans'],AdaBoostClassifier())
+model_q3_XGB=model_assignment(X,df['q3Ans'],XGBClassifier())
+
+model_q4_Bag=model_assignment(X,df['q4Ans'],BaggingClassifier())
+model_q4_Ada=model_assignment(X,df['q4Ans'],AdaBoostClassifier())
+model_q4_XGB=model_assignment(X,df['q4Ans'],XGBClassifier())
+
+model_q5_Bag=model_assignment(X,df['q5Ans'],BaggingClassifier())
+model_q5_Ada=model_assignment(X,df['q5Ans'],AdaBoostClassifier())
+model_q5_XGB=model_assignment(X,df['q5Ans'],XGBClassifier())
+
+model_q6_Bag=model_assignment(X,df['q6Ans'],BaggingClassifier())
+model_q6_Ada=model_assignment(X,df['q6Ans'],AdaBoostClassifier())
+model_q6_XGB=model_assignment(X,df['q6Ans'],XGBClassifier())
+
+model_q7_Bag=model_assignment(X,df['q7Ans'],BaggingClassifier())
+model_q7_Ada=model_assignment(X,df['q7Ans'],AdaBoostClassifier())
+model_q7_XGB=model_assignment(X,df['q7Ans'],XGBClassifier())
+
+#Take the inputs
+age=input("Please enter the age: ")
+lat=input("Please enter the lattitude: ")
+lon=input("Please enter the longitude: ")
+model_no=input("Please enter the model to be used:\nmodel 1: BaggingClassifier\nmodel 2: AdaBoostClassifier\nmodel 3: XGBClassifier\n")
+
+#Convert the location input into geohash and then create a dataframe "A" containing dummy variables for geohash
+#...and "age" variable 
+gohash=gh.encode(float(lat),float(lon), precision=3)
+l=[]
+for x in X.columns.values.tolist():
+    if x==gohash:
+        l.append(1)
+    elif x=='age':
+        l.append(int(age))
+    else:
+        l.append(0)
+A=pd.DataFrame([l], columns=X.columns.tolist())
+
+#This is for selecting the model and predicting the results accordingly
+if int(model_no)==1:
+    name='1- BaggingClassifier'
+    print(f'Model Chosen:{name}\n')
+    cat=model_cat_Bag.predict(A)
+    print(f'Best compatible category:\t{cat[0]}\n')
+    p=model_q1_Bag.predict_proba(A)[0]
+    print(f'Q1- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q1- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q1- Probability of 2:\t\t{round(p[2],2)*100}%\n')
+    p=model_q2_Bag.predict_proba(A)[0]
+    print(f'Q2- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q2- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q2- Probability of 2:\t\t{round(p[2],2)*100}%\n')
+    p=model_q3_Bag.predict_proba(A)[0]
+    print(f'Q3- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q3- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q3- Probability of 2:\t\t{round(p[2],2)*100}%\n')
+    p=model_q4_Bag.predict_proba(A)[0]
+    print(f'Q4- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q4- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q4- Probability of 2:\t\t{round(p[2],2)*100}%\n')
+    p=model_q5_Bag.predict_proba(A)[0]
+    print(f'Q5- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q5- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q5- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q6_Bag.predict_proba(A)[0]
+    print(f'Q6- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q6- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q6- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q7_Bag.predict_proba(A)[0]
+    print(f'Q7- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q7- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q7- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+
+elif int(model_no)==2:
+    name='2- AdaBoostClassifier'
+    print(f'Model Chosen:{name}\n')
+    cat=model_cat_Ada.predict(A)
+    print(f'Best compatible category:\t{cat[0]}\n')
+    p=model_q1_Ada.predict_proba(A)[0]
+    x=1
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q2_Ada.predict_proba(A)[0]
+    x=2
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q3_Ada.predict_proba(A)[0]
+    x=3
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q4_Ada.predict_proba(A)[0]
+    x=4
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q5_Ada.predict_proba(A)[0]
+    x=5
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q6_Ada.predict_proba(A)[0]
+    x=6
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    x=7
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+elif int(model_no)==3:
+    name='3- XGBClassifier'
+    print(f'Model Chosen:{name}\n')
+    cat=model_cat_XGB.predict(A)
+    print(f'Best compatible category:\t{cat[0]}\n')
+    p=model_q1_XGB.predict_proba(A)[0]
+    x=1
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q2_XGB.predict_proba(A)[0]
+    x=2
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q3_XGB.predict_proba(A)[0]
+    x=3
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q4_XGB.predict_proba(A)[0]
+    x=4
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q5_XGB.predict_proba(A)[0]
+    x=5
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    p=model_q6_XGB.predict_proba(A)[0]
+    x=6
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+    x=7
+    print(f'Q{x}- Probability of 0:\t\t{round(p[0]*100,2)}%')
+    print(f'Q{x}- Probability of 1:\t\t{round(p[1]*100,2)}%')
+    print(f'Q{x}- Probability of 2:\t\t{round(p[2]*100,2)}%\n')
+else:
+    print('Model not found. Please enter the model number from 1 to 3')
+   
+#This is for graphing the outputs of all variables for graphical comparison
+acat=model_cat_Bag.predict_proba(A)
+aq1=model_q1_Bag.predict_proba(A)[0]
+aq2=model_q2_Bag.predict_proba(A)[0]
+aq3=model_q3_Bag.predict_proba(A)[0]
+aq4=model_q4_Bag.predict_proba(A)[0]
+aq5=model_q5_Bag.predict_proba(A)[0]
+aq6=model_q6_Bag.predict_proba(A)[0]
+aq7=model_q7_Bag.predict_proba(A)[0]
+
+bcat=model_cat_Ada.predict_proba(A)
+bq1=model_q1_Ada.predict_proba(A)[0]
+bq2=model_q2_Ada.predict_proba(A)[0]
+bq3=model_q3_Ada.predict_proba(A)[0]
+bq4=model_q4_Ada.predict_proba(A)[0]
+bq5=model_q5_Ada.predict_proba(A)[0]
+bq6=model_q6_Ada.predict_proba(A)[0]
+bq7=model_q7_Ada.predict_proba(A)[0]
+
+ccat=model_cat_XGB.predict_proba(A)
+cq1=model_q1_XGB.predict_proba(A)[0]
+cq2=model_q2_XGB.predict_proba(A)[0]
+cq3=model_q3_XGB.predict_proba(A)[0]
+cq4=model_q4_XGB.predict_proba(A)[0]
+cq5=model_q5_XGB.predict_proba(A)[0]
+cq6=model_q6_XGB.predict_proba(A)[0]
+cq7=model_q7_XGB.predict_proba(A)[0]
+#This is a function for plotting graphs comparing the prediction of three models
+def plot_graph(xq0,yq0,zq0,l):
+    fig = plt.figure(figsize=(10,5))
+    ax = fig.add_subplot(111)
+    for i,j in zip(np.array([0,1,2]),xq0):
+        ax.annotate(str(j)[:4],xy=(i,j), fontsize=14)
+    for i,j in zip(np.array([0,1,2]),yq0):
+        ax.annotate(str(j)[:4],xy=(i,j), fontsize=14)
+    for i,j in zip(np.array([0,1,2]),zq0):
+        ax.annotate(str(j)[:4],xy=(i,j), fontsize=14)
+    plt.plot(aq1, label="Model1: Bagging Classifier",linestyle="--")
+    plt.plot(bq1, label="Model2: AdaBoost Classifier",linestyle="--", color='green')
+    plt.plot(cq1, label="Model2: XGB Classifier",linestyle="--", color='red')
+    plt.xlabel("Answer", fontsize=15)
+    plt.ylabel("Probability", fontsize=15)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.legend(fontsize=14)
+    plt.title("Prediction for question "+str(l), fontsize=16)
+    plt.show()
+#Plot the graph for comparing probabilities for category predicted by the three models
+fig = plt.figure(figsize=(10,5))
+ax = fig.add_subplot(111)
+for i,j in zip(np.array([0,1,2,3,4,5]),acat[0]):
+    ax.annotate(str(j)[:4],xy=(i,j), fontsize=14)
+for i,j in zip(np.array([0,1,2,3,4,5]),bcat[0]):
+    ax.annotate(str(j)[:4],xy=(i,j), fontsize=14)
+for i,j in zip(np.array([0,1,2,3,4,5]),ccat[0]):
+    ax.annotate(str(j)[:4],xy=(i,j), fontsize=14)
+plt.plot(acat[0], label="Model1: Bagging Classifier",linestyle="--")
+plt.plot(bcat[0], label="Model2: AdaBoost Classifier",linestyle="--", color='green')
+plt.plot(ccat[0], label="Model2: XGB Classifier",linestyle="--", color='red')
+plt.xlabel("Category", fontsize=15)
+plt.ylabel("Probability", fontsize=15)
+plt.xticks(ticks=[0,1,2,3,4,5],labels=['Cat1', 'Cat2', 'Cat3', 'Cat4', 'Cat5', 'Cat6'])
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.legend(fontsize=14)
+plt.title("Prediction for Category", fontsize=16)
+plt.show()
+#Use the function to graph the probabilities predicted for questions by the three models
+for x,y,z,o in [[aq1,bq1,cq1,1],[aq2,bq2,cq2,2],[aq3,bq3,cq3,3],[aq4,bq4,cq4,4],
+[aq5,bq5,cq5,5],[aq6,bq6,cq6,6],[aq7,bq7,cq7,7]]:
+    plot_graph(x,y,z,o)
